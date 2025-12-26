@@ -1,0 +1,21 @@
+{
+  "projectTitle": "India – Convention Center & Wedding Hall Booking App",
+  "market": "IN",
+  "currency": "INR",
+  "paymentMethods": ["UPI", "Credit/Debit Card", "Net Banking"],
+  "deliverables": [
+    "Android App",
+    "iOS App",
+    "Web Admin Panel",
+    "Web Hall Owner Dashboard"
+  ],
+  "theme": {
+    "primaryColor": "#1565C0",
+    "accentColor": "#FFD700",
+    "fontFamily": "Inter, sans-serif"
+  },
+  "features": {
+    "aiPricing": true,
+    "availabilityLocking": true
+  }
+}
