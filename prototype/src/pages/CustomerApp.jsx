@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { Routes, Route, Link, useParams, useNavigate, useLocation } from 'react-router-dom'
-import { Search, MapPin, Star, Calendar, ChevronRight, Check, ShieldCheck, Zap, Users, ArrowLeft, Share2, Heart, Clock } from 'lucide-react'
+import { Routes, Route, Link, useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { Search, MapPin, Star, Calendar, ChevronRight, Check, ShieldCheck, Zap, Users, ArrowLeft, Share2, Heart, Clock, User, Settings, LogOut, Camera, Mail, Phone } from 'lucide-react'
 import { halls, bookings } from '../data/mockData'
+import logo from '../assets/weds_india_logo.png'
 
 // --- 1. Main Controller ---
 export default function CustomerApp() {
@@ -11,6 +12,7 @@ export default function CustomerApp() {
             <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/bookings" element={<MyBookings />} />
+                <Route path="/profile" element={<MyProfile />} />
                 <Route path="/hall/:id" element={<HallDetails />} />
                 <Route path="/hall/:id/book" element={<BookingFlow />} />
                 <Route path="/success" element={<SuccessScreen />} />
@@ -24,16 +26,15 @@ const NavBar = () => (
     <nav style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', position: 'sticky', top: 0, zIndex: 100, borderBottom: '1px solid #f3f4f6' }}>
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '70px' }}>
             <Link to="/customer" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '32px', height: '32px', background: 'var(--color-primary)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 'bold' }}>W</div>
-                <span style={{ fontFamily: 'Outfit', fontWeight: 700, fontSize: '1.25rem', color: 'var(--color-primary)' }}>WedsIndia</span>
+                <img src={logo} alt="WedsIndia" style={{ height: '40px' }} />
             </Link>
 
             {/* New Navigation Links */}
             <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
                 <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.95rem', fontWeight: 500, color: 'var(--color-text-main)' }}>
-                    <Link to="/customer" style={{ textDecoration: 'none', color: 'inherit' }}>Wedding Halls</Link>
-                    <Link to="/customer" style={{ textDecoration: 'none', color: 'inherit' }}>Convention Centers</Link>
-                    <Link to="/customer" style={{ textDecoration: 'none', color: 'inherit' }}>Luxury Banquets</Link>
+                    <Link to="/customer?type=Wedding Hall" style={{ textDecoration: 'none', color: 'inherit' }}>Wedding Halls</Link>
+                    <Link to="/customer?type=Convention Center" style={{ textDecoration: 'none', color: 'inherit' }}>Convention Centers</Link>
+                    <Link to="/customer?type=Luxury Banquet" style={{ textDecoration: 'none', color: 'inherit' }}>Luxury Banquets</Link>
                 </div>
 
                 <div style={{ width: '1px', height: '24px', background: '#e5e7eb' }}></div>
@@ -41,7 +42,9 @@ const NavBar = () => (
                 <Link to="/customer/bookings" style={{ textDecoration: 'none', color: 'var(--color-primary)', fontWeight: 600 }}>
                     My Bookings
                 </Link>
-                <Link to="/" className="btn-ghost" style={{ textDecoration: 'none', fontSize: '0.9rem' }}>Log Out</Link>
+                <Link to="/customer/profile" className="btn-ghost" style={{ textDecoration: 'none', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <User size={16} /> My Profile
+                </Link>
             </div>
         </div>
     </nav>
@@ -81,6 +84,32 @@ const HallCard = ({ hall }) => (
 // --- 3. Home Screen ---
 function Home() {
     const [searchTerm, setSearchTerm] = useState('')
+    const [searchParams] = useSearchParams()
+    const typeFilter = searchParams.get('type') // Get filter from URL based on NavBar click
+    const [filteredSuggestions, setFilteredSuggestions] = useState([])
+    const [showSuggestions, setShowSuggestions] = useState(false)
+
+    // Filter Logic: Combine Type Filter + Search Term
+    const visibleHalls = halls.filter(hall => {
+        const matchesType = typeFilter ? hall.type === typeFilter : true
+        // Note: Main search bar behavior (filtering grid) is optional if we rely on suggestions, 
+        // but it's good UX to filter the grid too or keep it as "Trending"
+        return matchesType
+    })
+
+    // Search Suggestion Logic
+    useEffect(() => {
+        if (searchTerm.length >= 3) {
+            const matches = halls.filter(h =>
+                h.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                h.location.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+            setFilteredSuggestions(matches)
+            setShowSuggestions(true)
+        } else {
+            setShowSuggestions(false)
+        }
+    }, [searchTerm])
 
     return (
         <div className="animate-fade-in">
@@ -99,13 +128,38 @@ function Home() {
                             <span style={{ fontWeight: 500 }}>Hyderabad</span>
                         </div>
                         <Search size={20} style={{ marginLeft: '1.5rem', color: '#9ca3af' }} />
-                        <input
-                            type="text"
-                            placeholder="Search by name, location or vibe..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{ flex: 1, border: 'none', outline: 'none', padding: '1rem', fontSize: '1rem' }}
-                        />
+                        <div style={{ position: 'relative', width: '100%' }}>
+                            <input
+                                type="text"
+                                placeholder="Search by name, location or vibe..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{ flex: 1, border: 'none', outline: 'none', padding: '1rem', fontSize: '1rem', width: '100%' }}
+                            />
+                            {showSuggestions && (
+                                <div style={{
+                                    position: 'absolute', top: '100%', left: 0, right: 0,
+                                    background: 'white', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                                    zIndex: 50, marginTop: '10px', overflow: 'hidden', textAlign: 'left'
+                                }}>
+                                    {filteredSuggestions.length > 0 ? (
+                                        filteredSuggestions.map(hall => (
+                                            <Link
+                                                key={hall.id}
+                                                to={`/customer/hall/${hall.id}`}
+                                                style={{ textDecoration: 'none', color: 'inherit', display: 'block', padding: '1rem', borderBottom: '1px solid #f3f4f6' }}
+                                                onClick={() => setShowSuggestions(false)}
+                                            >
+                                                <div style={{ fontWeight: 600 }}>{hall.name}</div>
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-light)' }}>{hall.location}</div>
+                                            </Link>
+                                        ))
+                                    ) : (
+                                        <div style={{ padding: '1rem', color: 'var(--color-text-light)' }}>No matches found</div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                         <button className="btn-primary" style={{ padding: '0.75rem 2rem' }}>Search</button>
                     </div>
                 </div>
@@ -115,10 +169,19 @@ function Home() {
                 {/* Removed CategoryCard Grid as per feedback */}
 
                 <div style={{ marginTop: '3rem', marginBottom: '5rem' }}>
-                    <h2 style={{ fontSize: '2rem', marginBottom: '2rem' }}>Trending Venues</h2>
-                    <div className="grid-auto">
-                        {halls.map(hall => <HallCard key={hall.id} hall={hall} />)}
-                    </div>
+                    <h2 style={{ fontSize: '2rem', marginBottom: '2rem' }}>
+                        {typeFilter ? `${typeFilter}s` : 'Trending Venues'}
+                    </h2>
+                    {visibleHalls.length > 0 ? (
+                        <div className="grid-auto">
+                            {visibleHalls.map(hall => <HallCard key={hall.id} hall={hall} />)}
+                        </div>
+                    ) : (
+                        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-light)' }}>
+                            <p style={{ fontSize: '1.2rem' }}>No venues found for "{typeFilter}".</p>
+                            <Link to="/customer" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>View All Venues</Link>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -174,6 +237,100 @@ function MyBookings() {
 
             <div style={{ marginTop: '2rem', textAlign: 'center' }}>
                 <Link to="/customer" className="btn-primary">Book New Venue</Link>
+            </div>
+        </div>
+    )
+}
+
+// --- 3.8 My Profile Screen ---
+function MyProfile() {
+    const [user, setUser] = useState({
+        name: 'Santhosh Testing',
+        email: 'santhosh@wedsindia.com',
+        phone: '+91 98765 43210',
+        avatar: null
+    })
+
+    return (
+        <div className="container animate-fade-in" style={{ padding: '3rem 1.5rem', maxWidth: '800px' }}>
+            <h1 style={{ fontSize: '2.5rem', marginBottom: '2rem', color: 'var(--color-primary)' }}>My Profile</h1>
+
+            <div style={{ display: 'grid', gap: '2rem' }}>
+                {/* Profile Header */}
+                <div className="card" style={{ padding: '2rem', display: 'flex', alignItems: 'center', gap: '2rem' }}>
+                    <div style={{ position: 'relative' }}>
+                        <div style={{
+                            width: '100px', height: '100px', borderRadius: '50%', background: '#e0e7ff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '2.5rem', color: 'var(--color-primary)', fontWeight: 700,
+                            overflow: 'hidden'
+                        }}>
+                            {user.avatar ? <img src={user.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'ST'}
+                        </div>
+                        <button style={{
+                            position: 'absolute', bottom: 0, right: 0, background: 'var(--color-primary)', color: 'white',
+                            border: 'none', borderRadius: '50%', width: '32px', height: '32px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                        }}>
+                            <Camera size={14} />
+                        </button>
+                    </div>
+                    <div>
+                        <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{user.name}</h2>
+                        <p style={{ margin: '0.5rem 0 0', color: 'var(--color-text-light)' }}>Member since Dec 2025</p>
+                    </div>
+                </div>
+
+                {/* Personal Information */}
+                <div className="card" style={{ padding: '2rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                        <h3 style={{ margin: 0 }}>Personal Information</h3>
+                        <button className="btn-ghost" style={{ color: 'var(--color-primary)', fontSize: '0.9rem' }}>Edit</button>
+                    </div>
+
+                    <div style={{ display: 'grid', gap: '1.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ padding: '0.75rem', background: '#f3f4f6', borderRadius: '12px' }}><User size={20} color="#4b5563" /></div>
+                            <div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-light)' }}>Full Name</div>
+                                <div style={{ fontWeight: 500 }}>{user.name}</div>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ padding: '0.75rem', background: '#f3f4f6', borderRadius: '12px' }}><Mail size={20} color="#4b5563" /></div>
+                            <div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-light)' }}>Email Address</div>
+                                <div style={{ fontWeight: 500 }}>{user.email}</div>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ padding: '0.75rem', background: '#f3f4f6', borderRadius: '12px' }}><Phone size={20} color="#4b5563" /></div>
+                            <div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--color-text-light)' }}>Phone Number</div>
+                                <div style={{ fontWeight: 500 }}>{user.phone}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Account Settings */}
+                <div className="card" style={{ padding: '0' }}>
+                    <div style={{ padding: '1.5rem 2rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <Settings size={20} />
+                            <span style={{ fontWeight: 500 }}>Account Settings</span>
+                        </div>
+                        <ChevronRight size={18} color="#9ca3af" />
+                    </div>
+                    <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+                        <div style={{ padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: '#ef4444' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <LogOut size={20} />
+                                <span style={{ fontWeight: 500 }}>Log Out</span>
+                            </div>
+                        </div>
+                    </Link>
+                </div>
             </div>
         </div>
     )

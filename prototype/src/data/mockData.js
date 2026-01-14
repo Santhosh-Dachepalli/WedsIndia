@@ -10,7 +10,8 @@ export const halls = [
         amenities: ['AC', 'Parking', 'Catering', 'Decor', '2 Rooms'],
         description: 'A luxurious hall perfect for grand weddings and receptions. Located in the heart of the city with ample parking.',
         contactPhone: '+91 98480 12345',
-        contactEmail: 'bookings@grandconvention.com'
+        contactEmail: 'bookings@grandconvention.com',
+        type: 'Convention Center'
     },
     {
         id: 2,
@@ -23,7 +24,8 @@ export const halls = [
         amenities: ['Non-AC', 'Open Lawn', 'Basic Decor', 'Stage'],
         description: 'An affordable open lawn venue suitable for evening receptions and parties.',
         contactPhone: '+91 88888 77777',
-        contactEmail: 'contact@sunshinelawns.in'
+        contactEmail: 'contact@sunshinelawns.in',
+        type: 'Wedding Hall'
     },
     {
         id: 3,
@@ -36,7 +38,8 @@ export const halls = [
         amenities: ['AC', 'Valet Parking', 'Premium Catering', 'Live Music', 'Bridal Suite'],
         description: 'Heritage royal architecture with modern amenities. The best destination for a royal wedding experience.',
         contactPhone: '+91 99000 54321',
-        contactEmail: 'sales@royalpalace.com'
+        contactEmail: 'sales@royalpalace.com',
+        type: 'Luxury Banquet'
     }
 ];
 

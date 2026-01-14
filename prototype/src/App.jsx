@@ -21,7 +21,7 @@ function App() {
             <div className="app-container">
                 <Routes>
                     {/* Public Routes */}
-                    <Route path="/" element={<Login onLogin={setUser} />} />
+                    <Route path="/" element={<Login setUser={setUser} />} />
                     <Route path="/signup" element={<SignUp />} />
 
                     {/* Protected Routes */}
