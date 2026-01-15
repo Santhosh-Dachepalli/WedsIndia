@@ -117,7 +117,8 @@ export default function SignUp({ setUser }) {
 
             setSuccess(true)
             setTimeout(() => {
-                if (formData.role === 'owner') navigate('/owner')
+                if (formData.role === 'admin') navigate('/admin')
+                else if (formData.role === 'owner') navigate('/owner')
                 else navigate('/customer')
             }, 1000)
 

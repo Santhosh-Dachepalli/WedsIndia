@@ -231,7 +231,8 @@ function Home() {
     const visibleHalls = halls.filter(hall => {
         const matchesType = typeFilter ? hall.type === typeFilter : true
         const matchesCity = selectedCity ? hall.location.includes(selectedCity) : true
-        return matchesType && matchesCity
+        const isApproved = hall.status === 'Approved'
+        return matchesType && matchesCity && isApproved
     })
 
     const detectLocation = () => {
@@ -683,11 +684,15 @@ function HallDetails() {
 
                     <h3 style={{ marginTop: '3rem' }}>Amenities</h3>
                     <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-                        {hall.amenities.map(a => (
-                            <div key={a} style={{ border: '1px solid #e5e7eb', padding: '1rem 1.5rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 500 }}>
-                                <Check size={18} color="var(--color-primary)" /> {a}
-                            </div>
-                        ))}
+                        {(hall.amenities || []).length > 0 ? (
+                            hall.amenities.map(a => (
+                                <div key={a} style={{ border: '1px solid #e5e7eb', padding: '1rem 1.5rem', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '10px', fontWeight: 500 }}>
+                                    <Check size={18} color="var(--color-primary)" /> {a}
+                                </div>
+                            ))
+                        ) : (
+                            <div style={{ color: '#9ca3af', fontStyle: 'italic' }}>No standard amenities listed.</div>
+                        )}
                     </div>
 
                     <div style={{ marginTop: '3rem', padding: '2rem', background: '#f0f9ff', borderRadius: '16px', borderLeft: '4px solid var(--color-primary)' }}>
@@ -753,32 +758,64 @@ function BookingFlow() {
     const navigate = useNavigate()
     const [step, setStep] = useState(1)
     const [date, setDate] = useState('')
+
+
     const [eventDetails, setEventDetails] = useState('')
     const [attendees, setAttendees] = useState('')
     const [error, setError] = useState('')
+    const [confirmedDates, setConfirmedDates] = useState([])
+    const [currentMonth, setCurrentMonth] = useState(new Date())
 
-    // Check Availability on Date Change
+    // Fetch Confirmed Bookings for this Hall
     useEffect(() => {
-        if (date) {
-            const selectedDate = new Date(date)
-            const today = new Date()
-            today.setHours(0, 0, 0, 0) // Reset time to start of day for comparison
+        if (!id) return
+        const q = query(collection(db, 'bookings'), where('hallId', '==', id), where('status', '==', 'Confirmed'))
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const dates = snapshot.docs.map(doc => doc.data().date)
+            setConfirmedDates(dates)
+        })
+        return () => unsubscribe()
+    }, [id])
 
-            const isBooked = bookings.some(b =>
-                b.hallId === parseInt(id) &&
-                b.date === date &&
-                ['Confirmed', 'Pending'].includes(b.status)
-            )
+    // Calendar Helper Functions
+    const getDaysInMonth = (date) => {
+        const year = date.getFullYear()
+        const month = date.getMonth()
+        const firstDay = new Date(year, month, 1).getDay()
+        const daysInMonth = new Date(year, month + 1, 0).getDate()
 
-            if (selectedDate < today) {
-                setError('⚠️ You cannot book a date in the past. Please select a future date.')
-            } else if (isBooked) {
-                setError('⚠️ This date is already booked by another user. Please choose another date.')
-            } else {
-                setError('')
-            }
+        const days = []
+        for (let i = 0; i < firstDay; i++) days.push(null) // Padding
+        for (let d = 1; d <= daysInMonth; d++) {
+            days.push(new Date(year, month, d))
         }
-    }, [date, id])
+        return days
+    }
+
+    const formatDate = (d) => {
+        if (!d) return ''
+        return d.toISOString().split('T')[0]
+    }
+
+    const isDateBlocked = (d) => {
+        if (!d) return false
+        const dateStr = formatDate(d)
+
+        // Block Past Dates
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        if (d < today) return true
+
+        return confirmedDates.includes(dateStr)
+    }
+
+    const getBlockingReason = (d) => {
+        if (!d) return ''
+        const dateStr = formatDate(d)
+        if (confirmedDates.includes(dateStr)) return "This date is already secured for an event. Please choose another wonderful day!"
+        if (d < new Date().setHours(0, 0, 0, 0)) return "Bummer! You can't book a date in the past."
+        return ""
+    }
 
     const handleNext = async (e) => {
         e.preventDefault()
@@ -788,7 +825,8 @@ function BookingFlow() {
             // Processing payment and saving booking...
             try {
                 await addDoc(collection(db, 'bookings'), {
-                    hallId: parseInt(id), // Keeping ID types consistent
+                    hallId: id,
+                    ownerId: hall.ownerId,
                     hallName: hall.name,
                     hallImage: hall.image,
                     hallLocation: hall.location,
@@ -797,7 +835,7 @@ function BookingFlow() {
                     date: date,
                     eventDetails: eventDetails,
                     attendees: attendees,
-                    status: 'Pending', // Default status
+                    status: 'Pending',
                     amount: hall.price,
                     timestamp: Timestamp.now()
                 })
@@ -836,17 +874,65 @@ function BookingFlow() {
                 <form onSubmit={handleNext}>
                     {step === 1 && (
                         <div className="animate-fade-in">
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Select Wedding Date</label>
-                            <input
-                                type="date"
-                                required
-                                className="card"
-                                style={{ width: '100%', padding: '1rem', border: error ? '2px solid #ef4444' : '1px solid #ddd', marginBottom: '0.5rem' }}
-                                min={new Date().toISOString().split('T')[0]} // Block past dates natively
-                                onChange={e => setDate(e.target.value)}
-                            />
-                            {error && <p style={{ color: '#ef4444', fontSize: '0.9rem', marginTop: 0, marginBottom: '2rem', fontWeight: 600 }}>{error}</p>}
-                            {!error && <div style={{ marginBottom: '2rem' }}></div>}
+                            <label style={{ display: 'block', marginBottom: '1.5rem', fontWeight: 600, fontSize: '1.1rem' }}>Select Event Date</label>
+
+                            {/* Custom Calendar UI */}
+                            <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '16px', marginBottom: '2rem', border: '1px solid #e2e8f0' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                    <button type="button" onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() - 1)))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 700 }}>&larr; Prev</button>
+                                    <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>{currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</div>
+                                    <button type="button" onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth() + 1)))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', fontWeight: 700 }}>Next &rarr;</button>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+                                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                                        <div key={day} style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', paddingBottom: '0.5rem' }}>{day}</div>
+                                    ))}
+                                    {getDaysInMonth(currentMonth).map((d, i) => {
+                                        const dateStr = formatDate(d)
+                                        const blocked = isDateBlocked(d)
+                                        const selected = date === dateStr
+                                        const reason = getBlockingReason(d)
+
+                                        return (
+                                            <div
+                                                key={i}
+                                                title={reason}
+                                                onClick={() => !blocked && d && setDate(dateStr)}
+                                                style={{
+                                                    padding: '0.75rem 0',
+                                                    borderRadius: '8px',
+                                                    fontSize: '0.9rem',
+                                                    fontWeight: 600,
+                                                    cursor: blocked || !d ? 'not-allowed' : 'pointer',
+                                                    background: selected ? 'var(--color-primary)' : blocked ? '#fee2e2' : 'white',
+                                                    color: selected ? 'white' : blocked ? '#ef4444' : '#1e293b',
+                                                    border: selected ? '1px solid var(--color-primary)' : '1px solid #f1f5f9',
+                                                    opacity: !d ? 0 : 1,
+                                                    textDecoration: blocked ? 'line-through' : 'none',
+                                                    transition: 'all 0.2s',
+                                                    position: 'relative'
+                                                }}
+                                            >
+                                                {d ? d.getDate() : ''}
+                                                {selected && <div style={{ position: 'absolute', bottom: '2px', left: '50%', transform: 'translateX(-50%)', width: '4px', height: '4px', borderRadius: '50%', background: 'white' }} />}
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+
+                            {date && (
+                                <div style={{ background: '#ecfdf5', padding: '1rem', borderRadius: '12px', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46', fontSize: '0.9rem', fontWeight: 600 }}>
+                                    <Check size={16} /> Selected: {new Date(date).toLocaleDateString(undefined, { dateStyle: 'long' })}
+                                </div>
+                            )}
+
+                            {!date && (
+                                <p style={{ color: '#ef4444', fontSize: '0.9rem', marginTop: 0, marginBottom: '2rem', fontWeight: 600 }}>
+                                    Please select an available date for your event.
+                                </p>
+                            )}
 
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Full Name</label>
                             <input type="text" placeholder="e.g. Rahul & Priya" required className="card" style={{ width: '100%', padding: '1rem', border: '1px solid #ddd', marginBottom: '1.5rem' }} />

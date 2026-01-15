@@ -93,3 +93,7 @@ Thumbs.db
 
 # Vite build output
 dist/
+
+# Firebase
+.firebase/
+

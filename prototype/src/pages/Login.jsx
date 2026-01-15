@@ -8,8 +8,8 @@ import { db } from '../firebase'
 import venueBg from '../assets/signup_venue_bg.png' // Utilizing the same luxury image
 
 export default function Login({ setUser }) {
-    const [email, setEmail] = useState('user@weds.in') // Default for demo
-    const [password, setPassword] = useState('User@123')
+    const [email, setEmail] = useState('')
+    const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const navigate = useNavigate()
 
@@ -30,7 +30,9 @@ export default function Login({ setUser }) {
                 role: role
             })
 
-            navigate(role === 'owner' ? '/owner' : '/customer')
+            if (role === 'admin') navigate('/admin')
+            else if (role === 'owner') navigate('/owner')
+            else navigate('/customer')
         } catch (err) {
             console.error(err)
             setError(err.message)
@@ -64,7 +66,9 @@ export default function Login({ setUser }) {
                 role: role
             })
 
-            navigate(role === 'owner' ? '/owner' : '/customer')
+            if (role === 'admin') navigate('/admin')
+            else if (role === 'owner') navigate('/owner')
+            else navigate('/customer')
         } catch (err) {
             console.error(err)
             setError('Google Sign-In failed. Please try again.')
