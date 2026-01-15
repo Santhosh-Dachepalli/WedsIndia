@@ -1,8 +1,11 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Shield, Mail, Lock, LogIn } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
+import { LogIn } from 'lucide-react'
 import { auth, googleProvider } from '../firebase'
 import { signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { db } from '../firebase'
+import venueBg from '../assets/signup_venue_bg.png' // Utilizing the same luxury image
 
 export default function Login({ setUser }) {
     const [email, setEmail] = useState('user@weds.in') // Default for demo
@@ -16,21 +19,20 @@ export default function Login({ setUser }) {
             const userCredential = await signInWithEmailAndPassword(auth, email, password)
             const user = userCredential.user
 
-            // For prototype, we default to customer unless we check DB.
-            // In a real app, fetch user role from Firestore here.
+            // Explicitly fetch role to ensure correct navigation in this component
+            const userDoc = await getDoc(doc(db, "users", user.uid))
+            const role = userDoc.exists() ? (userDoc.data().role || 'customer') : 'customer'
 
-            const appUser = {
-                id: user.uid,
-                name: user.displayName || 'User',
+            setUser({
+                uid: user.uid,
                 email: user.email,
-                role: 'customer'
-            }
+                displayName: user.displayName,
+                role: role
+            })
 
-            setUser(appUser)
-            navigate('/customer')
+            navigate(role === 'owner' ? '/owner' : '/customer')
         } catch (err) {
             console.error(err)
-            // Debugging: Show actual error
             setError(err.message)
         }
     }
@@ -40,16 +42,29 @@ export default function Login({ setUser }) {
             const result = await signInWithPopup(auth, googleProvider)
             const user = result.user
 
-            // For prototype, we treat all Google logins as "Customers"
-            const appUser = {
-                id: user.uid,
-                name: user.displayName || 'Google User',
-                email: user.email,
-                role: 'customer' // Default role
+            let role = 'customer'
+            const userDoc = await getDoc(doc(db, "users", user.uid))
+
+            if (userDoc.exists()) {
+                role = userDoc.data().role || 'customer'
+            } else {
+                await setDoc(doc(db, "users", user.uid), {
+                    uid: user.uid,
+                    fullName: user.displayName,
+                    email: user.email,
+                    role: 'customer',
+                    createdAt: new Date()
+                })
             }
 
-            setUser(appUser)
-            navigate('/customer')
+            setUser({
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName,
+                role: role
+            })
+
+            navigate(role === 'owner' ? '/owner' : '/customer')
         } catch (err) {
             console.error(err)
             setError('Google Sign-In failed. Please try again.')
@@ -57,71 +72,144 @@ export default function Login({ setUser }) {
     }
 
     return (
-        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)', fontFamily: 'Inter, sans-serif' }}>
-            <div className="card animate-fade-in" style={{ width: '100%', maxWidth: '400px', padding: '2.5rem', background: 'white', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F3F4F6', fontFamily: 'Inter, sans-serif', padding: '1rem' }}>
 
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                    <div style={{ width: '60px', height: '60px', background: '#eff6ff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
-                        <Shield size={30} color="#1e40af" />
-                    </div>
-                    <h1 style={{ fontFamily: 'Outfit, sans-serif', fontSize: '1.75rem', color: '#111827', margin: 0 }}>Welcome Back</h1>
-                    <p style={{ color: '#6b7280', marginTop: '0.5rem' }}>Login to access your wedding dashboard</p>
-                </div>
+            <div className="login-card" style={{ width: '100%', maxWidth: '1200px', background: 'white', borderRadius: '40px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.1)', overflow: 'hidden', display: 'flex', minHeight: '700px' }}>
 
-                {error && <div style={{ background: '#fee2e2', color: '#b91c1c', padding: '0.75rem', borderRadius: '12px', fontSize: '0.9rem', marginBottom: '1.5rem', textAlign: 'center' }}>
-                    {error}
-                </div>}
+                {/* Left Side - Form */}
+                <div className="login-form-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
 
-                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <div style={{ position: 'relative' }}>
-                        <Mail size={20} color="#9ca3af" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
-                        <input
-                            type="email"
-                            placeholder="Email Address"
-                            value={email}
-                            onChange={e => setEmail(e.target.value.trim())}
-                            style={{ width: '100%', padding: '1rem 1rem 1rem 3rem', borderRadius: '12px', border: '1px solid #e5e7eb', outline: 'none', transition: 'all 0.2s' }}
-                        />
-                    </div>
-                    <div style={{ position: 'relative' }}>
-                        <Lock size={20} color="#9ca3af" style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)' }} />
-                        <input
-                            type="password"
-                            placeholder="Password"
-                            value={password}
-                            onChange={e => setPassword(e.target.value)}
-                            style={{ width: '100%', padding: '1rem 1rem 1rem 3rem', borderRadius: '12px', border: '1px solid #e5e7eb', outline: 'none', transition: 'all 0.2s' }}
-                        />
+                    <div style={{ marginBottom: '3rem' }}>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#000', marginBottom: '0.5rem', letterSpacing: '-1px' }}>BookMyVenue.</h2>
                     </div>
 
-                    <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-                        <LogIn size={20} /> Login with Email
-                    </button>
-                </form>
+                    <div style={{ maxWidth: '400px', width: '100%', margin: '0 auto' }}>
 
-                <div style={{ display: 'flex', alignItems: 'center', margin: '2rem 0', color: '#9ca3af', fontSize: '0.8rem' }}>
-                    <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }}></div>
-                    <span style={{ padding: '0 1rem' }}>OR CONTINUE WITH</span>
-                    <div style={{ flex: 1, height: '1px', background: '#e5e7eb' }}></div>
+                        <h1 style={{ fontSize: '3.5rem', fontWeight: 700, color: '#111827', marginBottom: '1rem', lineHeight: 1.1 }} className="login-title">Hi there!</h1>
+                        <p style={{ color: '#6B7280', fontSize: '1rem', marginBottom: '2rem' }}>Welcome to BookMyVenue Dashboard</p>
+
+                        {/* Google Button - Top Priority */}
+                        <button
+                            type="button"
+                            onClick={handleGoogleLogin}
+                            style={{
+                                width: '100%', padding: '1rem', borderRadius: '16px', border: '1px solid #E5E7EB', background: 'white',
+                                color: '#1F2937', fontWeight: 600, fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', cursor: 'pointer',
+                                transition: 'all 0.2s', marginBottom: '2rem'
+                            }}
+                            onMouseOver={e => e.currentTarget.style.background = '#F9FAFB'}
+                            onMouseOut={e => e.currentTarget.style.background = 'white'}
+                        >
+                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" height="20" alt="Google" />
+                            Log in with Google
+                        </button>
+
+                        <div style={{ display: 'flex', alignItems: 'center', margin: '0 0 2rem 0', color: '#9CA3AF', fontSize: '0.85rem' }}>
+                            <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }}></div>
+                            <span style={{ padding: '0 1rem' }}>or</span>
+                            <div style={{ flex: 1, height: '1px', background: '#E5E7EB' }}></div>
+                        </div>
+
+                        {error && <div style={{ background: '#FEF2F2', color: '#DC2626', padding: '0.75rem', borderRadius: '12px', fontSize: '0.9rem', marginBottom: '1.5rem', textAlign: 'center' }}>
+                            {error}
+                        </div>}
+
+                        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+                            <input
+                                type="email"
+                                placeholder="Your email"
+                                value={email}
+                                onChange={e => setEmail(e.target.value.trim())}
+                                style={{ width: '100%', padding: '1.25rem', borderRadius: '16px', border: '1px solid #E5E7EB', outline: 'none', background: '#F9FAFB', fontSize: '0.95rem', color: '#1F2937' }}
+                            />
+
+                            <input
+                                type="password"
+                                placeholder="Password"
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                style={{ width: '100%', padding: '1.25rem', borderRadius: '16px', border: '1px solid #E5E7EB', outline: 'none', background: '#F9FAFB', fontSize: '0.95rem', color: '#1F2937' }}
+                            />
+
+                            <div style={{ textAlign: 'right' }}>
+                                <a href="#" style={{ color: '#2563EB', fontSize: '0.9rem', textDecoration: 'none', fontWeight: 500 }}>Forgot password?</a>
+                            </div>
+
+                            <button type="submit"
+                                style={{
+                                    background: '#111827', color: 'white', padding: '1.25rem', borderRadius: '100px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer', border: 'none', marginTop: '1rem', transition: 'transform 0.1s'
+                                }}
+                                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
+                                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                            >
+                                Log In
+                            </button>
+                        </form>
+
+                        <div style={{ textAlign: 'center', marginTop: '2rem' }}>
+                            <span style={{ color: '#6B7280', fontSize: '0.9rem' }}>Don't have an account? </span>
+                            <Link to="/signup" style={{ color: '#2563EB', fontWeight: 600, textDecoration: 'none' }}>Sign up</Link>
+                        </div>
+                    </div>
                 </div>
 
-                <button
-                    type="button"
-                    onClick={handleGoogleLogin}
-                    className="hover-card"
-                    style={{
-                        width: '100%', padding: '1rem', borderRadius: '12px', border: '1px solid #e5e7eb', background: 'white',
-                        color: '#374151', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', cursor: 'pointer',
-                        transition: 'all 0.2s'
-                    }}>
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" height="20" alt="Google" />
-                    Sign in with Google
-                </button>
+                {/* Right Side - Visual */}
+                <div style={{ flex: 1, background: '#111827', position: 'relative', overflow: 'hidden', display: 'none', '@media(min-width: 1024px)': { display: 'block' } }} className="desktop-flex">
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                        backgroundImage: `url(${venueBg})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        opacity: 0.8
+                    }}></div>
 
-                <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-                    <span style={{ color: '#6b7280', fontSize: '0.9rem' }}>Don't have an account? </span>
-                    <a href="/signup" style={{ color: '#1e40af', fontWeight: 600, textDecoration: 'none' }}>Sign Up</a>
+                    {/* Dark Overlay with Gradient */}
+                    <div style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'linear-gradient(to top, #111827 10%, rgba(17, 24, 39, 0) 80%)'
+                    }}></div>
+
+                    {/* Content */}
+                    <div style={{ position: 'relative', zIndex: 10, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '4rem' }}>
+                        <div>
+                            <div style={{ marginBottom: '2rem', fontSize: '4rem', color: 'rgba(255,255,255,0.2)', fontFamily: 'serif' }}>“</div>
+                            <h2 style={{ fontSize: '2.5rem', fontWeight: 700, color: 'white', lineHeight: 1.2, marginBottom: '1rem' }}>
+                                Go anywhere you want in a <br /> Galaxy full of wonders!
+                            </h2>
+                            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#60A5FA' }}></div>
+                                <span style={{ color: '#9CA3AF', fontSize: '0.9rem' }}>01</span>
+                                <span style={{ color: '#4B5563', fontSize: '0.9rem' }}>06</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+                <style>
+                    {`
+                    .login-form-container { padding: 4rem; }
+                    .login-title { fontSize: 3.5rem !important; }
+
+                    @media (min-width: 1024px) {
+                        .desktop-flex { display: block !important; }
+                    }
+                    @media (max-width: 1023px) {
+                        .desktop-flex { display: none !important; }
+                        .login-card {
+                            min-height: auto !important;
+                            border-radius: 24px !important;
+                            flex-direction: column !important;
+                        }
+                        .login-form-container { 
+                            padding: 2.5rem 1.5rem !important; 
+                        }
+                        .login-title { 
+                            font-size: 2.5rem !important; 
+                            margin-bottom: 0.5rem !important;
+                        }
+                    }
+                    `}
+                </style>
             </div>
         </div>
     )

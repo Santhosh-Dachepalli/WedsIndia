@@ -9,21 +9,43 @@ import Login from './pages/Login'
 import DataSeeder from './components/DataSeeder'
 import { auth } from './firebase'
 import { onAuthStateChanged } from 'firebase/auth'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from './firebase'
 
 function App() {
     const [user, setUser] = useState(null) // Global Auth State
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
-                // In a real app, you'd fetch the role from Firestore here.
-                // For this prototype, we'll try to keep the existing role if set, 
-                // or default to 'customer' if it's a fresh load.
-                setUser({
-                    ...currentUser,
-                    role: 'customer' // Defaulting to customer for now
-                })
+                try {
+                    const userDoc = await getDoc(doc(db, "users", currentUser.uid))
+                    const role = userDoc.exists() ? (userDoc.data().role || 'customer') : null
+
+                    setUser(prev => {
+                        // If doc doesn't exist yet but we already have a role (from SignUp/Login manual set), keep it
+                        if (!role && prev && prev.role) return {
+                            uid: currentUser.uid,
+                            email: currentUser.email,
+                            displayName: currentUser.displayName,
+                            role: prev.role
+                        }
+                        return {
+                            uid: currentUser.uid,
+                            email: currentUser.email,
+                            displayName: currentUser.displayName,
+                            role: role || 'customer'
+                        }
+                    })
+                } catch (error) {
+                    console.error("Auth fetch error:", error)
+                    setUser({
+                        uid: currentUser.uid,
+                        email: currentUser.email,
+                        role: 'customer'
+                    })
+                }
             } else {
                 setUser(null)
             }
@@ -51,7 +73,7 @@ function App() {
                     <Routes>
                         {/* Public Routes */}
                         <Route path="/" element={<Login setUser={setUser} />} />
-                        <Route path="/signup" element={<SignUp />} />
+                        <Route path="/signup" element={<SignUp setUser={setUser} />} />
                         <Route path="/seed-db" element={<DataSeeder />} />
 
                         {/* Protected Routes */}

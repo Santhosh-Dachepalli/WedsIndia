@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { Routes, Route, Link, useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { Search, MapPin, Star, Calendar, ChevronRight, Check, ShieldCheck, Zap, Users, ArrowLeft, Share2, Heart, Clock, User, Settings, LogOut, Camera, Mail, Phone } from 'lucide-react'
-// import { halls, bookings } from '../data/mockData' // Commented out mock data
+import { Search, MapPin, Star, Calendar, ChevronRight, Check, ShieldCheck, Zap, Users, ArrowLeft, Share2, Heart, Clock, User, Settings, LogOut, Camera, Mail, Phone, X, Locate } from 'lucide-react'
+import { bookings } from '../data/mockData' // Keeping bookings mock data for now to prevent crash
 import { auth, storage, db } from '../firebase'
 import { onAuthStateChanged, updateProfile } from 'firebase/auth'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { collection, onSnapshot } from 'firebase/firestore'
-import logo from '../assets/weds_india_logo.png'
+import { collection, onSnapshot, addDoc, Timestamp, query, where } from 'firebase/firestore'
+import logo from '../assets/bookmyvenue_logo.png'
+import icon from '../assets/bookmyvenue_icon_final.png'
 
 // --- 1. Main Controller ---
 export default function CustomerApp() {
@@ -29,8 +30,11 @@ export default function CustomerApp() {
 const NavBar = () => (
     <nav style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(10px)', position: 'sticky', top: 0, zIndex: 100, borderBottom: '1px solid #f3f4f6' }}>
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '70px' }}>
-            <Link to="/customer" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <img src={logo} alt="WedsIndia" style={{ height: '40px' }} />
+            <Link to="/customer" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <img src={icon} alt="BookMyVenue" style={{ height: '40px' }} />
+                <span style={{ fontSize: '1.4rem', fontWeight: 700, color: '#1e3a8a', fontFamily: 'sans-serif', letterSpacing: '-0.5px' }}>
+                    Book<span style={{ color: '#f59e0b' }}>My</span>Venue
+                </span>
             </Link>
 
             {/* New Navigation Links */}
@@ -86,6 +90,113 @@ const HallCard = ({ hall }) => (
 )
 
 // --- 3. Home Screen ---
+const CitySelectionModal = ({ onClose, uniqueCities, onSelectCity, onDetectLocation }) => {
+    const popularCities = [
+        { name: 'Mumbai', code: 'MUM' },
+        { name: 'Delhi-NCR', code: 'DEL' },
+        { name: 'Bengaluru', code: 'BLR' },
+        { name: 'Hyderabad', code: 'HYD' },
+        { name: 'Chandigarh', code: 'CHD' },
+        { name: 'Ahmedabad', code: 'AMD' },
+        { name: 'Pune', code: 'PUN' },
+        { name: 'Chennai', code: 'CHE' },
+        { name: 'Kolkata', code: 'CCU' },
+        { name: 'Kochi', code: 'COK' },
+    ];
+
+    const [filter, setFilter] = useState('');
+
+    return (
+        <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: 'blur(4px)'
+        }} onClick={onClose}>
+            <div className="animate-fade-in" style={{
+                background: 'white', padding: '0', borderRadius: '16px',
+                width: '95%', maxWidth: '900px', maxHeight: '85vh', overflowY: 'auto',
+                position: 'relative', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+            }} onClick={e => e.stopPropagation()}>
+
+                {/* Header / Search */}
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid #f3f4f6', position: 'sticky', top: 0, background: 'white', zIndex: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '0.75rem 1rem', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                        <Search color="#ef4444" size={20} />
+                        <input
+                            type="text"
+                            placeholder="Search for your city"
+                            value={filter}
+                            onChange={e => setFilter(e.target.value)}
+                            autoFocus
+                            style={{ border: 'none', outline: 'none', fontSize: '1rem', flex: 1, color: '#374151' }}
+                        />
+                        <X size={20} color="#9ca3af" style={{ cursor: 'pointer' }} onClick={onClose} />
+                    </div>
+
+                    <div
+                        onClick={() => { onDetectLocation(); onClose(); }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#ef4444', fontWeight: 600, cursor: 'pointer', marginTop: '1.5rem' }}
+                    >
+                        <Locate size={20} />
+                        <span>Detect my location</span>
+                    </div>
+                </div>
+
+                <div style={{ padding: '2rem' }}>
+                    {/* Popular Cities */}
+                    {!filter && (
+                        <div style={{ marginBottom: '3rem' }}>
+                            <h3 style={{ textAlign: 'center', color: '#6b7280', fontSize: '0.85rem', marginBottom: '2rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Popular Cities</h3>
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', flexWrap: 'wrap' }}>
+                                {popularCities.map(city => (
+                                    <div key={city.name} onClick={() => { onSelectCity(city.name); onClose(); }} style={{ textAlign: 'center', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', width: '80px' }}>
+                                        <div style={{ width: '60px', height: '60px', borderRadius: '50%', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', fontSize: '1rem', fontWeight: 700, color: '#374151', transition: 'all 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}
+                                            onMouseOver={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.color = '#ef4444'; }}
+                                            onMouseOut={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.color = '#374151'; }}
+                                        >
+                                            {city.code}
+                                        </div>
+                                        <span style={{ fontSize: '0.85rem', color: '#4b5563', fontWeight: 500 }}>{city.name}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* All Cities */}
+                    <div>
+                        <h3 style={{ color: '#ef4444', fontSize: '0.9rem', marginBottom: '1.5rem', textAlign: 'center', fontWeight: 600 }}>{filter ? 'Search Results' : 'Other Cities'}</h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.75rem', textAlign: 'left' }}>
+                            {uniqueCities
+                                .filter(c => c.toLowerCase().includes(filter.toLowerCase()))
+                                .map(c => (
+                                    <div key={c} onClick={() => { onSelectCity(c); onClose(); }} style={{ cursor: 'pointer', color: '#4b5563', padding: '0.5rem', borderRadius: '6px', fontSize: '0.95rem' }}
+                                        onMouseOver={e => e.currentTarget.style.background = '#f3f4f6'}
+                                        onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                                    >
+                                        {c}
+                                    </div>
+                                ))}
+                            {uniqueCities.filter(c => c.toLowerCase().includes(filter.toLowerCase())).length === 0 && (
+                                <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#9ca3af', padding: '2rem' }}>
+                                    No cities found matching "{filter}"
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {filter === '' && (
+                    <div style={{ padding: '1.5rem', borderTop: '1px solid #f3f4f6', textAlign: 'center', color: '#ef4444', fontWeight: 600, cursor: 'pointer' }}>
+                        View All Cities
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
 function Home() {
     const [halls, setHalls] = useState([]) // Data from Firestore
     const [loading, setLoading] = useState(true)
@@ -111,6 +222,7 @@ function Home() {
     // City Filter State
     const [selectedCity, setSelectedCity] = useState('')
     const [detectingLoc, setDetectingLoc] = useState(false)
+    const [showCityModal, setShowCityModal] = useState(false)
 
     // Extract Unique Cities
     const uniqueCities = [...new Set(halls.map(h => h.location.split(',')[0].trim()))].sort()
@@ -180,26 +292,20 @@ function Home() {
                     </p>
 
                     <div style={{ position: 'relative', boxShadow: '0 20px 40px -10px rgba(30,58,138,0.15)', borderRadius: '50px', background: 'white', padding: '0.5rem', display: 'flex', alignItems: 'center' }}>
-                        <div style={{ padding: '0 1rem', borderRight: '1px solid #eee', color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', minWidth: '180px' }}>
-                            <MapPin
-                                size={20}
-                                color={detectingLoc ? "#9ca3af" : "var(--color-primary)"}
-                                onClick={detectLocation}
-                                className={detectingLoc ? "animate-spin" : ""}
-                                style={{ cursor: 'pointer' }}
-                                title="Detect Current Location"
-                            />
-                            <select
-                                value={selectedCity}
-                                onChange={(e) => setSelectedCity(e.target.value)}
-                                style={{ border: 'none', outline: 'none', fontSize: '1rem', color: '#4b5563', appearance: 'none', background: 'transparent', width: '100%', cursor: 'pointer' }}
-                            >
-                                <option value="">All Cities</option>
-                                {uniqueCities.map(city => <option key={city} value={city}>{city}</option>)}
-                            </select>
+                        <div
+                            style={{ padding: '0 0.5rem', borderRight: '1px solid #eee', color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+                            onClick={() => setShowCityModal(true)}
+                        >
+                            <MapPin size={20} color={selectedCity ? "var(--color-primary)" : "#9ca3af"} />
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                <span style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 500 }}>Location</span>
+                                <div style={{ fontSize: '1rem', color: '#1f2937', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    {selectedCity || 'All Cities'} <ChevronRight size={14} style={{ rotate: '90deg' }} />
+                                </div>
+                            </div>
                         </div>
-                        <Search size={20} style={{ marginLeft: '1rem', color: '#9ca3af' }} />
-                        <div style={{ position: 'relative', width: '100%' }}>
+                        <Search size={20} style={{ marginLeft: '0.5rem', color: '#9ca3af' }} />
+                        <div style={{ position: 'relative', flex: 1, marginRight: '1rem' }}>
                             <input
                                 type="text"
                                 placeholder="Search by name, location or vibe..."
@@ -236,10 +342,18 @@ function Home() {
                 </div>
             </div>
 
-            <div className="container" style={{ marginTop: '-3rem' }}>
-                {/* Removed CategoryCard Grid as per feedback */}
+            {/* City Selection Modal */}
+            {showCityModal && (
+                <CitySelectionModal
+                    onClose={() => setShowCityModal(false)}
+                    uniqueCities={uniqueCities}
+                    onSelectCity={setSelectedCity}
+                    onDetectLocation={detectLocation}
+                />
+            )}
 
-                <div style={{ marginTop: '3rem', marginBottom: '5rem' }}>
+            <div className="container" style={{ marginTop: '3rem', paddingBottom: '5rem' }}>
+                <div style={{ marginTop: '3rem' }}>
                     <h2 style={{ fontSize: '2rem', marginBottom: '2rem' }}>
                         {typeFilter ? `${typeFilter}s` : 'Trending Venues'}
                     </h2>
@@ -261,52 +375,74 @@ function Home() {
 
 // --- 3.5 My Bookings Screen ---
 function MyBookings() {
-    // Mock user bookings (In a real app, fetch by logged-in user ID)
-    // Note: for prototype simplicity, we are using mock bookings but connecting them to the real 'halls' fetched in Home. 
-    // Ideally MyBookings should also fetch 'halls' or 'bookings' from Firestore.
-    // For now, let's just use static mock data for bookings for display purposes.
-    const myBookings = [
-        { id: 101, hall: { name: 'Grand Royal', image: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80', location: 'Bangalore' }, date: '2025-05-20', status: 'Confirmed', amount: 150000 },
-        { id: 102, hall: { name: 'Golden Pearl', image: 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?q=80', location: 'Chennai' }, date: '2025-06-15', status: 'Pending', amount: 80000 }
-    ]
+    const [myBookings, setMyBookings] = useState([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        const userId = auth.currentUser?.uid
+        if (!userId) {
+            setLoading(false)
+            return
+        }
+
+        const q = query(collection(db, 'bookings'), where('userId', '==', userId))
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const bookingsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+            // Sort by latest first (client-side sort for simplicity)
+            bookingsData.sort((a, b) => b.timestamp - a.timestamp)
+            setMyBookings(bookingsData)
+            setLoading(false)
+        }, (error) => {
+            console.error("Error fetching bookings:", error)
+            setLoading(false)
+        })
+
+        return () => unsubscribe()
+    }, [])
+
+    if (loading) return <div style={{ padding: '4rem', textAlign: 'center' }}>Loading Bookings...</div>
 
     return (
         <div className="container animate-fade-in" style={{ padding: '3rem 1.5rem', minHeight: '60vh' }}>
             <h1 style={{ fontSize: '2.5rem', marginBottom: '2rem', color: 'var(--color-primary)' }}>My Bookings</h1>
 
             <div style={{ display: 'grid', gap: '1.5rem' }}>
-                {myBookings.map(booking => (
-                    <div key={booking.id} className="card" style={{ display: 'flex', gap: '1.5rem', padding: '1.5rem', alignItems: 'center' }}>
-                        <img src={booking.hall.image} alt="Venue" style={{ width: '120px', height: '100px', borderRadius: '12px', objectFit: 'cover' }} />
+                {myBookings.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#6b7280', padding: '2rem' }}>You have no bookings yet.</div>
+                ) : (
+                    myBookings.map(booking => (
+                        <div key={booking.id} className="card" style={{ display: 'flex', gap: '1.5rem', padding: '1.5rem', alignItems: 'center' }}>
+                            <img src={booking.hallImage} alt="Venue" style={{ width: '120px', height: '100px', borderRadius: '12px', objectFit: 'cover' }} />
 
-                        <div style={{ flex: 1 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                                <h3 style={{ margin: 0 }}>{booking.hall.name}</h3>
-                                <span style={{
-                                    padding: '0.25rem 0.75rem', borderRadius: '50px', fontSize: '0.85rem', fontWeight: 600,
-                                    background: booking.status === 'Confirmed' ? '#ecfdf5' : '#fff7ed',
-                                    color: booking.status === 'Confirmed' ? '#059669' : '#ea580c'
-                                }}>
-                                    {booking.status}
-                                </span>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                                    <h3 style={{ margin: 0 }}>{booking.hallName}</h3>
+                                    <span style={{
+                                        padding: '0.25rem 0.75rem', borderRadius: '50px', fontSize: '0.85rem', fontWeight: 600,
+                                        background: booking.status === 'Confirmed' ? '#ecfdf5' : '#fff7ed',
+                                        color: booking.status === 'Confirmed' ? '#059669' : '#ea580c'
+                                    }}>
+                                        {booking.status}
+                                    </span>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '2rem', color: 'var(--color-text-light)', fontSize: '0.95rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <Calendar size={16} /> {new Date(booking.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <Clock size={16} /> All Day Event
+                                    </div>
+                                </div>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '2rem', color: 'var(--color-text-light)', fontSize: '0.95rem' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <Calendar size={16} /> {new Date(booking.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <Clock size={16} /> All Day Event
-                                </div>
+                            <div style={{ textAlign: 'right', borderLeft: '1px solid #f3f4f6', paddingLeft: '1.5rem' }}>
+                                <div style={{ fontSize: '0.9rem', color: 'var(--color-text-light)' }}>Total Paid</div>
+                                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-primary)' }}>₹{booking.amount.toLocaleString()}</div>
                             </div>
                         </div>
-
-                        <div style={{ textAlign: 'right', borderLeft: '1px solid #f3f4f6', paddingLeft: '1.5rem' }}>
-                            <div style={{ fontSize: '0.9rem', color: 'var(--color-text-light)' }}>Total Paid</div>
-                            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--color-primary)' }}>₹{booking.amount.toLocaleString()}</div>
-                        </div>
-                    </div>
-                ))}
+                    ))
+                )}
             </div>
 
             <div style={{ marginTop: '2rem', textAlign: 'center' }}>
@@ -617,6 +753,8 @@ function BookingFlow() {
     const navigate = useNavigate()
     const [step, setStep] = useState(1)
     const [date, setDate] = useState('')
+    const [eventDetails, setEventDetails] = useState('')
+    const [attendees, setAttendees] = useState('')
     const [error, setError] = useState('')
 
     // Check Availability on Date Change
@@ -642,15 +780,34 @@ function BookingFlow() {
         }
     }, [date, id])
 
-    const handleNext = (e) => {
+    const handleNext = async (e) => {
         e.preventDefault()
         if (error) return // Block progress if error exists
 
         if (step === 2) {
-            // Processing payment...
-            // In a real app, we would POST to backend here to create the booking
-            // For prototype, we just navigate to success
-            setTimeout(() => navigate('/customer/success'), 1500)
+            // Processing payment and saving booking...
+            try {
+                await addDoc(collection(db, 'bookings'), {
+                    hallId: parseInt(id), // Keeping ID types consistent
+                    hallName: hall.name,
+                    hallImage: hall.image,
+                    hallLocation: hall.location,
+                    userId: auth.currentUser?.uid || 'guest',
+                    userName: auth.currentUser?.displayName || 'Guest',
+                    date: date,
+                    eventDetails: eventDetails,
+                    attendees: attendees,
+                    status: 'Pending', // Default status
+                    amount: hall.price,
+                    timestamp: Timestamp.now()
+                })
+
+                // Navigate to success after small delay
+                setTimeout(() => navigate('/customer/success'), 1000)
+            } catch (err) {
+                console.error("Error saving booking:", err)
+                setError("Failed to process booking. Please try again.")
+            }
         } else {
             setStep(step + 1)
         }
@@ -685,13 +842,35 @@ function BookingFlow() {
                                 required
                                 className="card"
                                 style={{ width: '100%', padding: '1rem', border: error ? '2px solid #ef4444' : '1px solid #ddd', marginBottom: '0.5rem' }}
+                                min={new Date().toISOString().split('T')[0]} // Block past dates natively
                                 onChange={e => setDate(e.target.value)}
                             />
                             {error && <p style={{ color: '#ef4444', fontSize: '0.9rem', marginTop: 0, marginBottom: '2rem', fontWeight: 600 }}>{error}</p>}
                             {!error && <div style={{ marginBottom: '2rem' }}></div>}
 
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Full Name</label>
-                            <input type="text" placeholder="e.g. Rahul & Priya" required className="card" style={{ width: '100%', padding: '1rem', border: '1px solid #ddd', marginBottom: '2rem' }} />
+                            <input type="text" placeholder="e.g. Rahul & Priya" required className="card" style={{ width: '100%', padding: '1rem', border: '1px solid #ddd', marginBottom: '1.5rem' }} />
+
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Event Details</label>
+                            <textarea
+                                placeholder="Describe your event (theme, preferences, etc.)"
+                                className="card"
+                                style={{ width: '100%', padding: '1rem', border: '1px solid #ddd', marginBottom: '1.5rem', minHeight: '100px', fontFamily: 'inherit' }}
+                                value={eventDetails}
+                                onChange={e => setEventDetails(e.target.value)}
+                            />
+
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Expected Attendees</label>
+                            <input
+                                type="number"
+                                placeholder="e.g. 500"
+                                required
+                                min="1"
+                                className="card"
+                                style={{ width: '100%', padding: '1rem', border: '1px solid #ddd', marginBottom: '2rem' }}
+                                value={attendees}
+                                onChange={e => setAttendees(e.target.value)}
+                            />
 
                             <button type="submit" className="btn-primary" style={{ width: '100%', opacity: error ? 0.5 : 1, cursor: error ? 'not-allowed' : 'pointer' }} disabled={!!error}>
                                 Continue to Payment
