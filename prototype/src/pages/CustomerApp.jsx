@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Routes, Route, Link, useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Search, MapPin, Star, Calendar, ChevronRight, Check, ShieldCheck, Zap, Users, ArrowLeft, Share2, Heart, Clock, User, Settings, LogOut, Camera, Mail, Phone } from 'lucide-react'
-import { halls, bookings } from '../data/mockData'
+// import { halls, bookings } from '../data/mockData' // Commented out mock data
+import { auth, storage, db } from '../firebase'
+import { onAuthStateChanged, updateProfile } from 'firebase/auth'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { collection, onSnapshot } from 'firebase/firestore'
 import logo from '../assets/weds_india_logo.png'
 
 // --- 1. Main Controller ---
@@ -83,19 +87,70 @@ const HallCard = ({ hall }) => (
 
 // --- 3. Home Screen ---
 function Home() {
+    const [halls, setHalls] = useState([]) // Data from Firestore
+    const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
+
+    // Fetch Halls from Firestore Real-time
+    useEffect(() => {
+        const unsubscribe = onSnapshot(collection(db, 'halls'), (snapshot) => {
+            const hallsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+            setHalls(hallsData)
+            setLoading(false)
+        }, (error) => {
+            console.error("Error fetching halls:", error)
+            setLoading(false)
+        })
+        return () => unsubscribe()
+    }, [])
     const [searchParams] = useSearchParams()
     const typeFilter = searchParams.get('type') // Get filter from URL based on NavBar click
     const [filteredSuggestions, setFilteredSuggestions] = useState([])
     const [showSuggestions, setShowSuggestions] = useState(false)
 
-    // Filter Logic: Combine Type Filter + Search Term
+    // City Filter State
+    const [selectedCity, setSelectedCity] = useState('')
+    const [detectingLoc, setDetectingLoc] = useState(false)
+
+    // Extract Unique Cities
+    const uniqueCities = [...new Set(halls.map(h => h.location.split(',')[0].trim()))].sort()
+
+    // Filter Logic: Combine Type Filter + City Filter + Search Term
     const visibleHalls = halls.filter(hall => {
         const matchesType = typeFilter ? hall.type === typeFilter : true
-        // Note: Main search bar behavior (filtering grid) is optional if we rely on suggestions, 
-        // but it's good UX to filter the grid too or keep it as "Trending"
-        return matchesType
+        const matchesCity = selectedCity ? hall.location.includes(selectedCity) : true
+        return matchesType && matchesCity
     })
+
+    const detectLocation = () => {
+        if (!navigator.geolocation) return alert("Geolocation is not supported by your browser")
+
+        setDetectingLoc(true)
+        navigator.geolocation.getCurrentPosition(async (position) => {
+            try {
+                const { latitude, longitude } = position.coords
+                const response = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`)
+                const data = await response.json()
+                const detectedCity = data.city || data.locality || ''
+
+                // Find closest match in our list
+                const match = uniqueCities.find(c => detectedCity.includes(c) || c.includes(detectedCity))
+
+                if (match) {
+                    setSelectedCity(match)
+                } else {
+                    alert(`Located you in ${detectedCity}, but we don't have venues there yet!`)
+                }
+            } catch (error) {
+                console.error("Geo error:", error)
+                alert("Failed to detect location")
+            }
+            setDetectingLoc(false)
+        }, () => {
+            alert("Unable to retrieve your location")
+            setDetectingLoc(false)
+        })
+    }
 
     // Search Suggestion Logic
     useEffect(() => {
@@ -111,6 +166,8 @@ function Home() {
         }
     }, [searchTerm])
 
+    if (loading) return <div style={{ padding: '4rem', textAlign: 'center' }}>Loading Venues...</div>
+
     return (
         <div className="animate-fade-in">
             <div style={{ background: 'linear-gradient(to bottom, #eff6ff, #fff)', padding: '4rem 0 6rem' }}>
@@ -123,11 +180,25 @@ function Home() {
                     </p>
 
                     <div style={{ position: 'relative', boxShadow: '0 20px 40px -10px rgba(30,58,138,0.15)', borderRadius: '50px', background: 'white', padding: '0.5rem', display: 'flex', alignItems: 'center' }}>
-                        <div style={{ padding: '0 1.5rem', borderRight: '1px solid #eee', color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                            <MapPin size={20} color="var(--color-primary)" />
-                            <span style={{ fontWeight: 500 }}>Hyderabad</span>
+                        <div style={{ padding: '0 1rem', borderRight: '1px solid #eee', color: 'var(--color-text-light)', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', minWidth: '180px' }}>
+                            <MapPin
+                                size={20}
+                                color={detectingLoc ? "#9ca3af" : "var(--color-primary)"}
+                                onClick={detectLocation}
+                                className={detectingLoc ? "animate-spin" : ""}
+                                style={{ cursor: 'pointer' }}
+                                title="Detect Current Location"
+                            />
+                            <select
+                                value={selectedCity}
+                                onChange={(e) => setSelectedCity(e.target.value)}
+                                style={{ border: 'none', outline: 'none', fontSize: '1rem', color: '#4b5563', appearance: 'none', background: 'transparent', width: '100%', cursor: 'pointer' }}
+                            >
+                                <option value="">All Cities</option>
+                                {uniqueCities.map(city => <option key={city} value={city}>{city}</option>)}
+                            </select>
                         </div>
-                        <Search size={20} style={{ marginLeft: '1.5rem', color: '#9ca3af' }} />
+                        <Search size={20} style={{ marginLeft: '1rem', color: '#9ca3af' }} />
                         <div style={{ position: 'relative', width: '100%' }}>
                             <input
                                 type="text"
@@ -191,9 +262,12 @@ function Home() {
 // --- 3.5 My Bookings Screen ---
 function MyBookings() {
     // Mock user bookings (In a real app, fetch by logged-in user ID)
+    // Note: for prototype simplicity, we are using mock bookings but connecting them to the real 'halls' fetched in Home. 
+    // Ideally MyBookings should also fetch 'halls' or 'bookings' from Firestore.
+    // For now, let's just use static mock data for bookings for display purposes.
     const myBookings = [
-        { id: 101, hall: halls[0], date: '2025-05-20', status: 'Confirmed', amount: 150000 },
-        { id: 102, hall: halls[1], date: '2025-06-15', status: 'Pending', amount: 80000 }
+        { id: 101, hall: { name: 'Grand Royal', image: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80', location: 'Bangalore' }, date: '2025-05-20', status: 'Confirmed', amount: 150000 },
+        { id: 102, hall: { name: 'Golden Pearl', image: 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?q=80', location: 'Chennai' }, date: '2025-06-15', status: 'Pending', amount: 80000 }
     ]
 
     return (
@@ -244,12 +318,61 @@ function MyBookings() {
 
 // --- 3.8 My Profile Screen ---
 function MyProfile() {
-    const [user, setUser] = useState({
-        name: 'Santhosh Testing',
-        email: 'santhosh@wedsindia.com',
-        phone: '+91 98765 43210',
-        avatar: null
+    const [user, setUser] = useState(auth.currentUser || {
+        displayName: 'Guest User',
+        email: 'guest@example.com',
+        phoneNumber: '',
+        photoURL: null
     })
+    const [isEditing, setIsEditing] = useState(false)
+    const [newName, setNewName] = useState(user.displayName || '')
+    const [uploading, setUploading] = useState(false)
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser)
+                setNewName(currentUser.displayName || '')
+            }
+        })
+        return () => unsubscribe()
+    }, [])
+
+    const handleImageChange = async (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+
+        if (!auth.currentUser) return alert("Please login first")
+
+        setUploading(true)
+        try {
+            const fileRef = ref(storage, `profile_images/${auth.currentUser.uid}`)
+            await uploadBytes(fileRef, file)
+            const photoURL = await getDownloadURL(fileRef)
+
+            await updateProfile(auth.currentUser, { photoURL })
+            setUser({ ...auth.currentUser, photoURL }) // Force re-render
+            alert("Profile picture updated!")
+        } catch (error) {
+            console.error("Error uploading image: ", error)
+            alert("Failed to upload image")
+        }
+        setUploading(false)
+    }
+
+    const handleSave = async () => {
+        if (!auth.currentUser) return
+
+        try {
+            await updateProfile(auth.currentUser, { displayName: newName })
+            setUser({ ...auth.currentUser, displayName: newName })
+            setIsEditing(false)
+            alert("Profile updated!")
+        } catch (error) {
+            console.error("Error updating profile: ", error)
+            alert("Failed to update profile")
+        }
+    }
 
     return (
         <div className="container animate-fade-in" style={{ padding: '3rem 1.5rem', maxWidth: '800px' }}>
@@ -263,21 +386,34 @@ function MyProfile() {
                             width: '100px', height: '100px', borderRadius: '50%', background: '#e0e7ff',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontSize: '2.5rem', color: 'var(--color-primary)', fontWeight: 700,
-                            overflow: 'hidden'
+                            overflow: 'hidden', border: '2px solid white', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
                         }}>
-                            {user.avatar ? <img src={user.avatar} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'ST'}
+                            {uploading ? <span style={{ fontSize: '0.8rem' }}>Uploading...</span> :
+                                user.photoURL ? <img src={user.photoURL} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> :
+                                    (user.displayName ? user.displayName.charAt(0).toUpperCase() : 'U')}
                         </div>
-                        <button style={{
+                        <label style={{
                             position: 'absolute', bottom: 0, right: 0, background: 'var(--color-primary)', color: 'white',
                             border: 'none', borderRadius: '50%', width: '32px', height: '32px',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                         }}>
                             <Camera size={14} />
-                        </button>
+                            <input type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
+                        </label>
                     </div>
                     <div>
-                        <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{user.name}</h2>
-                        <p style={{ margin: '0.5rem 0 0', color: 'var(--color-text-light)' }}>Member since Dec 2025</p>
+                        {isEditing ? (
+                            <input
+                                type="text"
+                                value={newName}
+                                onChange={(e) => setNewName(e.target.value)}
+                                style={{ fontSize: '1.5rem', padding: '0.5rem', borderRadius: '8px', border: '1px solid #ccc', width: '100%' }}
+                            />
+                        ) : (
+                            <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{user.displayName || 'User'}</h2>
+                        )}
+                        <p style={{ margin: '0.5rem 0 0', color: 'var(--color-text-light)' }}>{user.email}</p>
                     </div>
                 </div>
 
@@ -285,15 +421,22 @@ function MyProfile() {
                 <div className="card" style={{ padding: '2rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <h3 style={{ margin: 0 }}>Personal Information</h3>
-                        <button className="btn-ghost" style={{ color: 'var(--color-primary)', fontSize: '0.9rem' }}>Edit</button>
+                        {isEditing ? (
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button onClick={() => setIsEditing(false)} className="btn-ghost" style={{ fontSize: '0.9rem', color: '#6b7280' }}>Cancel</button>
+                                <button onClick={handleSave} className="btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}>Save</button>
+                            </div>
+                        ) : (
+                            <button onClick={() => setIsEditing(true)} className="btn-ghost" style={{ color: 'var(--color-primary)', fontSize: '0.9rem' }}>Edit Name</button>
+                        )}
                     </div>
 
                     <div style={{ display: 'grid', gap: '1.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             <div style={{ padding: '0.75rem', background: '#f3f4f6', borderRadius: '12px' }}><User size={20} color="#4b5563" /></div>
-                            <div>
+                            <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: '0.85rem', color: 'var(--color-text-light)' }}>Full Name</div>
-                                <div style={{ fontWeight: 500 }}>{user.name}</div>
+                                <div style={{ fontWeight: 500 }}>{user.displayName || 'Not Set'}</div>
                             </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -307,7 +450,7 @@ function MyProfile() {
                             <div style={{ padding: '0.75rem', background: '#f3f4f6', borderRadius: '12px' }}><Phone size={20} color="#4b5563" /></div>
                             <div>
                                 <div style={{ fontSize: '0.85rem', color: 'var(--color-text-light)' }}>Phone Number</div>
-                                <div style={{ fontWeight: 500 }}>{user.phone}</div>
+                                <div style={{ fontWeight: 500 }}>{user.phoneNumber || 'Not Linked'}</div>
                             </div>
                         </div>
                     </div>
@@ -322,7 +465,7 @@ function MyProfile() {
                         </div>
                         <ChevronRight size={18} color="#9ca3af" />
                     </div>
-                    <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+                    <Link to="/" onClick={() => auth.signOut()} style={{ textDecoration: 'none', color: 'inherit' }}>
                         <div style={{ padding: '1.5rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', color: '#ef4444' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                 <LogOut size={20} />
@@ -339,9 +482,30 @@ function MyProfile() {
 // --- 4. Hall Details ---
 function HallDetails() {
     const { id } = useParams()
-    const hall = halls.find(h => h.id === parseInt(id))
+    const [hall, setHall] = useState(null)
+    const [loading, setLoading] = useState(true)
 
-    if (!hall) return <div>Loading...</div>
+    useEffect(() => {
+        // In real app, fetch specific doc: doc(db, 'halls', id)
+        // For now, since we synced 'halls' in Home, we could pass it or fetch again.
+        // Let's fetch the single document for best practice.
+        const fetchHall = async () => {
+            const { doc, getDoc } = await import('firebase/firestore')
+            const { db } = await import('../firebase')
+            try {
+                const docRef = doc(db, "halls", id)
+                const docSnap = await getDoc(docRef)
+                if (docSnap.exists()) {
+                    setHall({ id: docSnap.id, ...docSnap.data() })
+                }
+            } catch (e) { console.error(e) }
+            setLoading(false)
+        }
+        fetchHall()
+    }, [id])
+
+    if (loading) return <div>Loading...</div>
+    if (!hall) return <div>Hall not found</div>
 
     return (
         <div className="animate-fade-in">
@@ -436,7 +600,20 @@ function HallDetails() {
 // --- 5. Booking Flow ---
 function BookingFlow() {
     const { id } = useParams()
-    const hall = halls.find(h => h.id === parseInt(id))
+    const [hall, setHall] = useState(null)
+
+    // Quick fetch for booking flow
+    useEffect(() => {
+        const fetchHall = async () => {
+            const { doc, getDoc } = await import('firebase/firestore')
+            const { db } = await import('../firebase')
+            const docRef = doc(db, "halls", id)
+            const docSnap = await getDoc(docRef)
+            if (docSnap.exists()) setHall({ id: docSnap.id, ...docSnap.data() })
+        }
+        fetchHall()
+    }, [id])
+
     const navigate = useNavigate()
     const [step, setStep] = useState(1)
     const [date, setDate] = useState('')
@@ -526,7 +703,7 @@ function BookingFlow() {
                         <div className="animate-fade-in">
                             <div style={{ background: '#eff6ff', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem', display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Total Amount</span>
-                                <span style={{ fontWeight: 800, color: 'var(--color-primary)' }}>₹{hall.price.toLocaleString()}</span>
+                                <span style={{ fontWeight: 800, color: 'var(--color-primary)' }}>₹{hall?.price?.toLocaleString()}</span>
                             </div>
 
                             <div style={{ marginBottom: '2rem' }}>

@@ -1,9 +1,8 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Shield, Mail, Lock, LogIn } from 'lucide-react'
-import { users } from '../data/mockAuth'
 import { auth, googleProvider } from '../firebase'
-import { signInWithPopup } from 'firebase/auth'
+import { signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth'
 
 export default function Login({ setUser }) {
     const [email, setEmail] = useState('user@weds.in') // Default for demo
@@ -11,18 +10,28 @@ export default function Login({ setUser }) {
     const [error, setError] = useState('')
     const navigate = useNavigate()
 
-    const handleLogin = (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault()
-        // 1. Check Mock Data
-        const foundUser = users.find(u => u.email === email && u.password === password)
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password)
+            const user = userCredential.user
 
-        if (foundUser) {
-            setUser(foundUser) // Set Global Auth State
-            if (foundUser.role === 'customer') navigate('/customer')
-            if (foundUser.role === 'owner') navigate('/owner')
-            if (foundUser.role === 'admin') navigate('/admin')
-        } else {
-            setError('Invalid credentials. Try user@weds.in / User@123')
+            // For prototype, we default to customer unless we check DB.
+            // In a real app, fetch user role from Firestore here.
+
+            const appUser = {
+                id: user.uid,
+                name: user.displayName || 'User',
+                email: user.email,
+                role: 'customer'
+            }
+
+            setUser(appUser)
+            navigate('/customer')
+        } catch (err) {
+            console.error(err)
+            // Debugging: Show actual error
+            setError(err.message)
         }
     }
 
@@ -70,7 +79,7 @@ export default function Login({ setUser }) {
                             type="email"
                             placeholder="Email Address"
                             value={email}
-                            onChange={e => setEmail(e.target.value)}
+                            onChange={e => setEmail(e.target.value.trim())}
                             style={{ width: '100%', padding: '1rem 1rem 1rem 3rem', borderRadius: '12px', border: '1px solid #e5e7eb', outline: 'none', transition: 'all 0.2s' }}
                         />
                     </div>
