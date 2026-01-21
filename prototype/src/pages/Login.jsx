@@ -10,8 +10,30 @@ import venueBg from '../assets/signup_venue_bg.png' // Utilizing the same luxury
 export default function Login({ setUser }) {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
+    const [rememberMe, setRememberMe] = useState(false)
+    const [savedAccounts, setSavedAccounts] = useState({})
     const [error, setError] = useState('')
     const navigate = useNavigate()
+
+    React.useEffect(() => {
+        const saved = localStorage.getItem('savedAccounts')
+        if (saved) {
+            try {
+                setSavedAccounts(JSON.parse(saved))
+            } catch (e) {
+                console.error("Failed to parse saved accounts", e)
+            }
+        }
+    }, [])
+
+    const handleEmailChange = (e) => {
+        const val = e.target.value.trim()
+        setEmail(val)
+        if (savedAccounts[val]) {
+            setPassword(savedAccounts[val])
+            setRememberMe(true)
+        }
+    }
 
     const handleLogin = async (e) => {
         e.preventDefault()
@@ -29,6 +51,12 @@ export default function Login({ setUser }) {
                 displayName: user.displayName,
                 role: role
             })
+
+            if (rememberMe) {
+                const newSaved = { ...savedAccounts, [email]: password }
+                setSavedAccounts(newSaved)
+                localStorage.setItem('savedAccounts', JSON.stringify(newSaved))
+            }
 
             if (role === 'admin') navigate('/admin')
             else if (role === 'owner') navigate('/owner')
@@ -123,10 +151,16 @@ export default function Login({ setUser }) {
                             <input
                                 type="email"
                                 placeholder="Your email"
+                                list="saved-emails"
                                 value={email}
-                                onChange={e => setEmail(e.target.value.trim())}
+                                onChange={handleEmailChange}
                                 style={{ width: '100%', padding: '1.25rem', borderRadius: '16px', border: '1px solid #E5E7EB', outline: 'none', background: '#F9FAFB', fontSize: '0.95rem', color: '#1F2937' }}
                             />
+                            <datalist id="saved-emails">
+                                {Object.keys(savedAccounts).map(acc => (
+                                    <option key={acc} value={acc} />
+                                ))}
+                            </datalist>
 
                             <input
                                 type="password"
@@ -136,7 +170,16 @@ export default function Login({ setUser }) {
                                 style={{ width: '100%', padding: '1.25rem', borderRadius: '16px', border: '1px solid #E5E7EB', outline: 'none', background: '#F9FAFB', fontSize: '0.95rem', color: '#1F2937' }}
                             />
 
-                            <div style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#6B7280', fontSize: '0.9rem', cursor: 'pointer' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={rememberMe} 
+                                        onChange={e => setRememberMe(e.target.checked)}
+                                        style={{ accentColor: '#111827' }}
+                                    />
+                                    Save Password
+                                </label>
                                 <a href="#" style={{ color: '#2563EB', fontSize: '0.9rem', textDecoration: 'none', fontWeight: 500 }}>Forgot password?</a>
                             </div>
 
