@@ -423,12 +423,12 @@ function Home() {
 
     return (
         <div className="animate-fade-in">
-            <div style={{ background: 'linear-gradient(to bottom, #eff6ff, #fff)', padding: '4rem 0 6rem' }}>
+            <div style={{ background: 'linear-gradient(to bottom, #eff6ff, #fff)', padding: '1.5rem 0 2rem' }}>
                 <div className="container" style={{ textAlign: 'center', maxWidth: '800px' }}>
-                    <h1 style={{ fontSize: '3rem', margin: '0 0 1.5rem 0', color: '#1e3a8a', lineHeight: 1.1 }}>
+                    <h1 style={{ fontSize: '2rem', margin: '0 0 0.75rem 0', color: '#1e3a8a', lineHeight: 1.1 }}>
                         Find the perfect venue for your <span style={{ color: 'var(--color-primary-light)' }}>Special Day</span>
                     </h1>
-                    <p style={{ fontSize: '1.25rem', color: 'var(--color-text-light)', marginBottom: '3rem' }}>
+                    <p style={{ fontSize: '1rem', color: 'var(--color-text-light)', marginBottom: '1.5rem' }}>
                         Discover & book 1000+ trusted wedding halls, convention centers using India's most loved event platform.
                     </p>
 
