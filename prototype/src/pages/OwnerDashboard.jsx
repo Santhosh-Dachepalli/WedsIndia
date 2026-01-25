@@ -209,7 +209,9 @@ export default function OwnerDashboard() {
                                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', padding: '1.5rem', background: '#f8fafc', borderRadius: '12px' }}>
                                             <div>
                                                 <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>Event Date</div>
-                                                <div style={{ fontWeight: 600, color: '#1e293b' }}>{b.date}</div>
+                                                <div style={{ fontWeight: 600, color: '#1e293b' }}>
+                                                    {b.date ? new Date(b.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
+                                                </div>
                                             </div>
                                             <div>
                                                 <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase', marginBottom: '4px' }}>Attendees</div>

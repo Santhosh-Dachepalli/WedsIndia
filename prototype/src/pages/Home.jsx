@@ -7,7 +7,7 @@ export default function Home() {
         <div style={{ minHeight: '100vh', background: 'linear-gradient(to bottom, #1565C0 40%, #F5F5F5 40%)' }}>
             <div className="container" style={{ padding: '4rem 1rem' }}>
                 <h1 style={{ color: 'white', textAlign: 'center', fontSize: '2.5rem', marginBottom: '1rem' }}>
-                    India Convention & Wedding Halls
+                    BookMyVenue
                 </h1>
                 <p style={{ color: 'rgba(255,255,255,0.9)', textAlign: 'center', fontSize: '1.2rem', marginBottom: '4rem' }}>
                     Select a persona to view the user flow

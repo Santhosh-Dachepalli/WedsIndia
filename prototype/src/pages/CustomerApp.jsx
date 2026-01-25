@@ -579,7 +579,7 @@ function MyBookings() {
 
                                 <div style={{ display: 'flex', gap: '2rem', color: 'var(--color-text-light)', fontSize: '0.95rem' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                        <Calendar size={16} /> {new Date(booking.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                        <Calendar size={16} /> {new Date(booking.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         <Clock size={16} /> All Day Event
@@ -1343,7 +1343,10 @@ function BookingFlow() {
 
     const formatDate = (d) => {
         if (!d) return ''
-        return d.toISOString().split('T')[0]
+        const year = d.getFullYear()
+        const month = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
     }
 
     const isDateBlocked = (d) => {
@@ -1366,35 +1369,57 @@ function BookingFlow() {
         return ""
     }
 
+    // Import Payment Service (Add to top imports if not dynamic)
+    // For now assuming dynamic import or global function availability, 
+    // but best to modify file to import it at top. 
+    // Actually, I'll use dynamic import for cleaner diff or just add import statement first.
+    // Let's modify the whole loop to be safe.
+
+    // ...
+
     const handleNext = async (e) => {
         e.preventDefault()
-        if (error) return // Block progress if error exists
+        if (error) return
 
         if (step === 2) {
-            // Processing payment and saving booking...
-            try {
-                await addDoc(collection(db, 'bookings'), {
-                    hallId: id,
-                    ownerId: hall.ownerId,
-                    hallName: hall.name,
-                    hallImage: hall.image,
-                    hallLocation: hall.location,
-                    userId: auth.currentUser?.uid || 'guest',
-                    userName: auth.currentUser?.displayName || 'Guest',
-                    date: date,
-                    eventDetails: eventDetails,
-                    attendees: attendees,
-                    status: 'Pending',
-                    amount: hall.price,
-                    timestamp: Timestamp.now()
-                })
+            // Step 2: Payment
+            const { initializePayment } = await import('../services/paymentService')
 
-                // Navigate to success after small delay
-                setTimeout(() => navigate('/customer/success'), 1000)
-            } catch (err) {
-                console.error("Error saving booking:", err)
-                setError("Failed to process booking. Please try again.")
-            }
+            initializePayment({
+                amount: hall.price,
+                hallName: hall.name,
+                userName: auth.currentUser?.displayName || 'Guest',
+                userEmail: auth.currentUser?.email || 'guest@example.com',
+                userPhone: auth.currentUser?.phoneNumber
+            }, async (response) => {
+                // Payment Success Callback
+                try {
+                    await addDoc(collection(db, 'bookings'), {
+                        hallId: id,
+                        ownerId: hall.ownerId,
+                        hallName: hall.name,
+                        hallImage: hall.image,
+                        hallLocation: hall.location,
+                        userId: auth.currentUser?.uid || 'guest',
+                        userName: auth.currentUser?.displayName || 'Guest',
+                        date: date,
+                        eventDetails: eventDetails,
+                        attendees: attendees,
+                        status: 'Confirmed', // Auto-confirm on payment!
+                        paymentId: response.razorpay_payment_id,
+                        amount: hall.price,
+                        timestamp: Timestamp.now()
+                    })
+                    // Navigate to success
+                    navigate('/customer/success', { state: { date: date, hallName: hall.name } })
+                } catch (err) {
+                    console.error("DB Error after payment:", err)
+                    setError("Payment successful but booking failed to save. Contact support.")
+                }
+            }, (error) => {
+                // Payment Failure Callback
+                setError("Payment Failed: " + (error.description || "Unknown error"))
+            })
         } else {
             setStep(step + 1)
         }
@@ -1473,7 +1498,7 @@ function BookingFlow() {
 
                             {date && (
                                 <div style={{ background: '#ecfdf5', padding: '1rem', borderRadius: '12px', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46', fontSize: '0.9rem', fontWeight: 600 }}>
-                                    <Check size={16} /> Selected: {new Date(date).toLocaleDateString(undefined, { dateStyle: 'long' })}
+                                    <Check size={16} /> Selected: {new Date(date + 'T00:00:00').toLocaleDateString(undefined, { dateStyle: 'long' })}
                                 </div>
                             )}
 
@@ -1550,16 +1575,19 @@ function BookingFlow() {
 }
 
 function SuccessScreen() {
+    const location = useLocation()
+    const { date, hallName } = location.state || {}
+
     return (
         <div style={{ textAlign: 'center', padding: '8rem 2rem', background: 'url(https://www.transparenttextures.com/patterns/cubes.png)' }}>
             <div className="animate-float" style={{ fontSize: '5rem', marginBottom: '1rem' }}>🎉</div>
             <h1 style={{ fontSize: '3.5rem', margin: 0, color: 'var(--color-primary)' }}>Booking Confirmed!</h1>
             <p style={{ fontSize: '1.5rem', color: '#6b7280', maxWidth: '600px', margin: '1rem auto 3rem' }}>
-                Congratulations! Your venue for <strong>{new Date().toDateString()}</strong> is officially secured.
+                Congratulations! Your venue{hallName ? ` (${hallName})` : ''} for <strong>{date ? new Date(date + 'T00:00:00').toLocaleDateString(undefined, { dateStyle: 'long' }) : 'your special day'}</strong> is officially secured.
             </p>
 
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                <Link to="/customer" className="btn-primary">Go to My Bookings</Link>
+                <Link to="/customer/bookings" className="btn-primary">Go to My Bookings</Link>
                 <button className="btn-secondary" style={{ background: 'white', border: '1px solid #ccc', padding: '1rem 2rem', borderRadius: '50px', cursor: 'pointer' }}>Download Invoice</button>
             </div>
         </div>
