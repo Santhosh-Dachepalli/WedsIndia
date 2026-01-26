@@ -8,8 +8,11 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { collection, onSnapshot, addDoc, Timestamp, query, where, doc, getDoc, setDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore'
 import logo from '../assets/bookmyvenue_logo.png'
 import icon from '../assets/bookmyvenue_icon_final.png' // User specified logo
+import SeedData from '../components/SeedData'
 
 // --- 1. Main Controller ---
+import { generateInvoice } from '../utils/invoiceGenerator'
+import { sendConfirmationEmail } from '../services/emailService'
 export default function CustomerApp() {
     return (
         <div style={{ paddingBottom: '80px' }}> {/* Space for sticky mobile nav if needed */}
@@ -22,6 +25,7 @@ export default function CustomerApp() {
                 <Route path="/hall/:id" element={<HallDetails />} />
                 <Route path="/hall/:id/book" element={<BookingFlow />} />
                 <Route path="/success" element={<SuccessScreen />} />
+                {/* <Route path="/seed" element={<SeedData />} /> */}
             </Routes>
         </div>
     )
@@ -160,7 +164,15 @@ const HallCard = ({ hall }) => {
         <div className="card" style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
             <div style={{ position: 'relative', height: '240px' }}>
                 <Link to={`/customer/hall/${hall.id}`} style={{ textDecoration: 'none', color: 'inherit', display: 'block', height: '100%' }}>
-                    <img src={hall.image} alt={hall.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img
+                        src={hall.image}
+                        alt={hall.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => {
+                            e.target.onerror = null;
+                            e.target.src = 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80&w=800&auto=format&fit=crop';
+                        }}
+                    />
                 </Link>
                 {/* Rating Badge (New Tag) -> Top Left */}
                 <div style={{ position: 'absolute', top: '1rem', left: '1rem', display: 'flex', gap: '8px' }}>
@@ -311,7 +323,7 @@ function Home() {
     // Fetch Halls from Firestore Real-time
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, 'halls'), (snapshot) => {
-            const hallsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+            const hallsData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }))
             setHalls(hallsData)
             setLoading(false)
         }, (error) => {
@@ -619,7 +631,7 @@ function WishlistPage() {
             setLoading(true)
             try {
                 // Fetch each hall document
-                const promises = wishlist.map(id => getDoc(doc(db, 'halls', id)))
+                const promises = wishlist.map(id => getDoc(doc(db, 'halls', String(id))))
                 const docs = await Promise.all(promises)
                 const halls = docs.map(d => d.exists() ? { id: d.id, ...d.data() } : null).filter(h => h)
                 setWishlistHalls(halls)
@@ -1402,6 +1414,8 @@ function BookingFlow() {
                         hallLocation: hall.location,
                         userId: auth.currentUser?.uid || 'guest',
                         userName: auth.currentUser?.displayName || 'Guest',
+                        userEmail: auth.currentUser?.email || 'guest@example.com', // Capture for email/invoice
+                        userPhone: auth.currentUser?.phoneNumber || '',
                         date: date,
                         eventDetails: eventDetails,
                         attendees: attendees,
@@ -1410,8 +1424,31 @@ function BookingFlow() {
                         amount: hall.price,
                         timestamp: Timestamp.now()
                     })
+
+                    // --- NEW: Trigger Email Notification ---
+                    sendConfirmationEmail({
+                        hallName: hall.name,
+                        userName: auth.currentUser?.displayName || 'Guest',
+                        userEmail: auth.currentUser?.email || 'guest@example.com',
+                        date: date
+                    }).then(() => {
+                        // Optional: Show specific toast for email
+                        console.log("Email notification triggered");
+                    });
+
                     // Navigate to success
-                    navigate('/customer/success', { state: { date: date, hallName: hall.name } })
+                    // Pass full details for Invoice Generation
+                    navigate('/customer/success', {
+                        state: {
+                            date: date,
+                            hallName: hall.name,
+                            amount: hall.price,
+                            hallLocation: hall.location,
+                            userName: auth.currentUser?.displayName || 'Guest',
+                            userEmail: auth.currentUser?.email || 'guest@example.com',
+                            userPhone: auth.currentUser?.phoneNumber || ''
+                        }
+                    })
                 } catch (err) {
                     console.error("DB Error after payment:", err)
                     setError("Payment successful but booking failed to save. Contact support.")
@@ -1576,19 +1613,45 @@ function BookingFlow() {
 
 function SuccessScreen() {
     const location = useLocation()
-    const { date, hallName } = location.state || {}
+    const { date, hallName, amount, hallLocation, userName, userEmail, userPhone } = location.state || {}
+
+    const [emailSent, setEmailSent] = useState(false);
+
+    useEffect(() => {
+        // Quick visual simulation of email sending if landing here
+        const timer = setTimeout(() => setEmailSent(true), 1500);
+        return () => clearTimeout(timer);
+    }, []);
+
+    const handleDownloadInvoice = () => {
+        if (!location.state) return alert("Booking details missing for invoice.");
+        generateInvoice(location.state);
+    };
 
     return (
         <div style={{ textAlign: 'center', padding: '8rem 2rem', background: 'url(https://www.transparenttextures.com/patterns/cubes.png)' }}>
             <div className="animate-float" style={{ fontSize: '5rem', marginBottom: '1rem' }}>🎉</div>
             <h1 style={{ fontSize: '3.5rem', margin: 0, color: 'var(--color-primary)' }}>Booking Confirmed!</h1>
+
+            {emailSent && (
+                <div className="animate-fade-in" style={{ margin: '1rem auto', padding: '0.5rem 1rem', background: '#ecfdf5', color: '#065f46', borderRadius: '30px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <Check size={16} /> Confirmation Email Sent to {userEmail}
+                </div>
+            )}
+
             <p style={{ fontSize: '1.5rem', color: '#6b7280', maxWidth: '600px', margin: '1rem auto 3rem' }}>
                 Congratulations! Your venue{hallName ? ` (${hallName})` : ''} for <strong>{date ? new Date(date + 'T00:00:00').toLocaleDateString(undefined, { dateStyle: 'long' }) : 'your special day'}</strong> is officially secured.
             </p>
 
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                 <Link to="/customer/bookings" className="btn-primary">Go to My Bookings</Link>
-                <button className="btn-secondary" style={{ background: 'white', border: '1px solid #ccc', padding: '1rem 2rem', borderRadius: '50px', cursor: 'pointer' }}>Download Invoice</button>
+                <button
+                    onClick={handleDownloadInvoice}
+                    className="btn-secondary"
+                    style={{ background: 'white', border: '1px solid #ccc', padding: '1rem 2rem', borderRadius: '50px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                    Download Invoice
+                </button>
             </div>
         </div>
     )

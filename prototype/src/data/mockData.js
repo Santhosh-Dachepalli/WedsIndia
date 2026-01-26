@@ -21,18 +21,18 @@ const types = ['Convention Center', 'Wedding Hall', 'Luxury Banquet'];
 
 // Unsplash Image Collection for Weddings/Venues
 const images = [
-    'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80&w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?q=80&w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1519225448526-72c961674389?q=80&w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1520854221256-17451cc330e7?q=80&w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1469334031218-e382a71b716b?q=80&w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1546709843-e35ee3e36e4e?q=80&w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1522673607200-1645062cd958?q=80&w=800&auto=format&fit=crop',
     'https://images.unsplash.com/photo-1505236858219-8359eb29e329?q=80&w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1520854221256-17451cc330e7?q=80&w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1561026454-e75871239968?q=80&w=800&auto=format&fit=crop',
-    'https://images.unsplash.com/photo-1478147427282-58a87a120781?q=80&w=800&auto=format&fit=crop'
+    'https://images.unsplash.com/photo-1544957992-20516f39223b?q=80&w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1510076857177-7470076d4098?q=80&w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1478147427282-58a87a120781?q=80&w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80&w=800&auto=format&fit=crop',
+    'https://images.unsplash.com/photo-1522673607200-1645062cd958?q=80&w=800&auto=format&fit=crop'
 ];
 
 const amenitiesList = ['AC', 'Parking', 'Catering', 'Decor', 'Rooms', 'WiFi', 'Power Backup', 'DJ', 'Valet', 'Pool', 'Garden', 'Security'];
@@ -77,7 +77,8 @@ const generateHalls = (count) => {
             description: `Experience the elegance of ${name}, the premier ${type} in ${location}. Perfect for your special day with world-class amenities and service.`,
             contactPhone: '+91 ' + getRandomInt(6000000000, 9999999999),
             contactEmail: `info@${name.replace(/\s+/g, '').toLowerCase()}.com`,
-            type: type
+            type: type,
+            status: 'Approved'
         });
     }
     return data;
